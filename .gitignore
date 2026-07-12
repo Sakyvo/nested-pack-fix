@@ -1,0 +1,17 @@
+.gradle/
+.idea/
+.toolchains/
+*.iml
+*.log
+*.log.gz
+build/
+dist/*
+!dist/.gitkeep
+run/
+out/
+forge-1.7.10/.gradle/
+forge-1.7.10/build/
+forge-1.7.10/run/
+forge-1.8.9/.gradle/
+forge-1.8.9/build/
+forge-1.8.9/run/

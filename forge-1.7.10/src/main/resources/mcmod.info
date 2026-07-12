@@ -1,0 +1,11 @@
+[
+  {
+    "modid": "nestedpackfix",
+    "name": "NestedPackFix",
+    "description": "Compatibility support for malformed resource pack archives.",
+    "version": "${version}",
+    "mcversion": "1.7.10",
+    "authorList": ["Sakyvo"],
+    "dependencies": []
+  }
+]

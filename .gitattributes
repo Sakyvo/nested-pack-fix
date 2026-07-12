@@ -1,0 +1,6 @@
+*.bat text eol=crlf
+*.gradle text eol=lf
+*.java text eol=lf
+*.md text eol=lf
+*.ps1 text eol=crlf
+gradlew text eol=lf

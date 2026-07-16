@@ -22,12 +22,17 @@ targetCompatibility = JavaVersion.VERSION_1_8
 
 tasks.withType(JavaCompile) {
     options.encoding = 'UTF-8'
+    options.compilerArgs += ['-Xlint:all', '-Werror']
 }
 
 minecraft {
     version = '1.8.9-11.15.1.2318-1.8.9'
     runDir = 'run'
     mappings = 'stable_20'
+}
+
+runClient {
+    jvmArgs '-Dfml.coreMods.load=com.sakyvo.nestedpackfix.forge189.NestedPackFixLoadingPlugin'
 }
 
 repositories {
@@ -58,3 +63,97 @@ processResources {
         exclude 'mcmod.info'
     }
 }
+
+jar {
+    manifest {
+        attributes(
+            'FMLCorePlugin': 'com.sakyvo.nestedpackfix.forge189.NestedPackFixLoadingPlugin',
+            'FMLCorePluginContainsFMLMod': 'true',
+            'ModSide': 'CLIENT'
+        )
+    }
+}
+
+task verifyReleaseJar(dependsOn: 'reobfJar') {
+    doLast {
+        def releaseJar = file("$buildDir/libs/${archivesBaseName}-${version}.jar")
+        if (!releaseJar.isFile()) {
+            throw new GradleException("Release JAR not found: $releaseJar")
+        }
+
+        def jarFile = new java.util.jar.JarFile(releaseJar)
+        try {
+            def attributes = jarFile.manifest.mainAttributes
+            def requiredManifest = [
+                FMLCorePlugin: 'com.sakyvo.nestedpackfix.forge189.NestedPackFixLoadingPlugin',
+                FMLCorePluginContainsFMLMod: 'true',
+                ModSide: 'CLIENT'
+            ]
+            requiredManifest.each { key, value ->
+                if (attributes.getValue(key) != value) {
+                    throw new GradleException("Invalid manifest $key")
+                }
+            }
+
+            def requiredEntries = [
+                'mcmod.info',
+                'com/sakyvo/nestedpackfix/archive/ArchiveInspector.class',
+                'com/sakyvo/nestedpackfix/forge189/NestedPackFixLoadingPlugin.class',
+                'com/sakyvo/nestedpackfix/forge189/NestedPackFixMod.class',
+                'com/sakyvo/nestedpackfix/forge189/core/NestedPackFixTransformer.class',
+                'com/sakyvo/nestedpackfix/forge189/pack/CompatiblePackFactory.class',
+                'com/sakyvo/nestedpackfix/forge189/client/ResourcePackGuiHandler.class',
+                'com/sakyvo/nestedpackfix/forge189/client/NestedResourcePackEntry.class',
+                'com/sakyvo/nestedpackfix/forge189/client/IllegalResourcePackEntry.class'
+            ]
+            requiredEntries.each { entry ->
+                if (jarFile.getEntry(entry) == null) {
+                    throw new GradleException("Missing release entry: $entry")
+                }
+            }
+
+            def metadata = new groovy.json.JsonSlurper().parseText(
+                jarFile.getInputStream(jarFile.getEntry('mcmod.info')).getText('UTF-8')
+            )[0]
+            if (metadata.modid != 'nestedpackfix'
+                || metadata.name != 'NestedPackFix'
+                || metadata.version != version.toString()
+                || metadata.mcversion != '1.8.9') {
+                throw new GradleException('Invalid mcmod.info identity')
+            }
+
+            def forbiddenPrefixes = [
+                'org/objectweb/asm/',
+                'org/apache/commons/',
+                'com/google/common/',
+                'org/apache/logging/log4j/',
+                'org/spongepowered/',
+                'gg/essential/'
+            ]
+            jarFile.entries().toList().each { entry ->
+                if (forbiddenPrefixes.any { entry.name.startsWith(it) }) {
+                    throw new GradleException("Embedded runtime dependency: ${entry.name}")
+                }
+                if (entry.name.endsWith('.class')) {
+                    byte[] header = new byte[8]
+                    def stream = new DataInputStream(jarFile.getInputStream(entry))
+                    try {
+                        stream.readFully(header)
+                    } finally {
+                        stream.close()
+                    }
+                    int major = ((header[6] & 0xff) << 8) | (header[7] & 0xff)
+                    if (major != 52) {
+                        throw new GradleException(
+                            "Non-Java-8 class ${entry.name}: major $major"
+                        )
+                    }
+                }
+            }
+        } finally {
+            jarFile.close()
+        }
+    }
+}
+
+build.dependsOn verifyReleaseJar
